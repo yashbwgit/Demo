@@ -72,7 +72,10 @@ pipeline {
         stage('Install deps') {
             steps {
                 // Install dependencies using pip
-                bat "${env.py} -m pip install -q -r requirements.txt"
+                bat """
+                    ${env.py} -m pip install --upgrade pip setuptools wheel
+                    ${env.py} -m pip install -r requirements.txt --no-cache-dir
+                """
             }
         }
 
