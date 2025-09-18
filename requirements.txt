@@ -1,6 +1,12 @@
 beautifulsoup4
 lxml
+<<<<<<< HEAD
 pandas
 numpy
 plotly
 chart.js
+=======
+flask
+plotly
+pandas
+>>>>>>> 2359f9a651db38ec3a0ffb90cfb9ea83e3ea223c
