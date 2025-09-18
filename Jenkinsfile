@@ -81,7 +81,9 @@ pipeline {
                 // Create reports folder and copy sample reports
                 bat """
                     if not exist reports mkdir reports
+                    if not exist output mkdir output
                     xcopy /E /I sample_reports\\* reports\\ >nul 2>&1
+                    copy scripts\\templates\\modern_dashboard.html output\\index.html
                     dir reports
                 """
             }
@@ -103,8 +105,8 @@ pipeline {
             }
             post {
                 always {
-                    // Archive artifacts (JSON + MD summary)
-                    archiveArtifacts artifacts: 'report_summary.json,summary.md', fingerprint: true
+                    // Archive artifacts (JSON + MD summary + Dashboard)
+                    archiveArtifacts artifacts: 'report_summary.json,summary.md,output/**/*', fingerprint: true
                 }
             }
         }
