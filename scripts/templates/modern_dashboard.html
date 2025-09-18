@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA Analytics Hub</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <!-- Framer Motion -->
+    <script src="https://unpkg.com/framer-motion/dist/framer-motion.js"></script>
+    <!-- ApexCharts -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --secondary-color: #8b5cf6;
+            --success-color: #22c55e;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --dark-bg: #1e1e2d;
+            --dark-card: #2a2a3c;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s ease;
+        }
+
+        .dark {
+            background-color: var(--dark-bg);
+            color: #e5e7eb;
+        }
+
+        .card {
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .dark .card {
+            background-color: var(--dark-card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .animate-number {
+            transition: all 0.5s ease;
+        }
+
+        .recommendation-card {
+            border-left: 4px solid var(--primary-color);
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .heatmap-cell {
+            transition: all 0.3s ease;
+        }
+
+        .heatmap-cell:hover {
+            transform: scale(1.1);
+            z-index: 10;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 100;
+            display: none;
+        }
+
+        .release-score {
+            position: relative;
+            width: 150px;
+            height: 150px;
+        }
+
+        .score-circle {
+            stroke-dasharray: 400;
+            stroke-dashoffset: 400;
+            transition: stroke-dashoffset 1s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 dark:text-white">
+                QA Analytics Hub
+            </h1>
+            <div class="flex items-center space-x-4">
+                <button id="darkModeToggle" class="p-2 rounded-lg bg-gray-200 dark:bg-gray-700">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <button id="exportData" class="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                    <i class="fas fa-download mr-2"></i>
+                    Export Data
+                </button>
+            </div>
+        </div>
+
+        <!-- Build Info -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-code-branch text-indigo-600 text-xl"></i>
+                    <div>
+                        <div class="text-sm text-gray-500 dark:text-gray-400">Build Number</div>
+                        <div class="font-semibold" id="buildNumber">Loading...</div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-clock text-indigo-600 text-xl"></i>
+                    <div>
+                        <div class="text-sm text-gray-500 dark:text-gray-400">Build Duration</div>
+                        <div class="font-semibold" id="buildDuration">Loading...</div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-code text-indigo-600 text-xl"></i>
+                    <div>
+                        <div class="text-sm text-gray-500 dark:text-gray-400">Commit Hash</div>
+                        <div class="font-semibold" id="commitHash">Loading...</div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-calendar text-indigo-600 text-xl"></i>
+                    <div>
+                        <div class="text-sm text-gray-500 dark:text-gray-400">Last Updated</div>
+                        <div class="font-semibold" id="lastUpdated">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Total Tests</p>
+                        <h3 class="text-2xl font-bold animate-number" id="totalTests">0</h3>
+                    </div>
+                    <div class="p-3 bg-blue-100 dark:bg-blue-900 rounded-full">
+                        <i class="fas fa-vial text-blue-600 dark:text-blue-300"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div class="flex items-center">
+                        <span class="text-sm text-gray-500 dark:text-gray-400">vs last build</span>
+                        <span class="ml-2 text-green-500">
+                            <i class="fas fa-arrow-up"></i>
+                            <span id="totalTestsTrend">0%</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Passed Tests</p>
+                        <h3 class="text-2xl font-bold animate-number" id="passedTests">0</h3>
+                    </div>
+                    <div class="p-3 bg-green-100 dark:bg-green-900 rounded-full">
+                        <i class="fas fa-check text-green-600 dark:text-green-300"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div class="flex items-center">
+                        <span class="text-sm text-gray-500 dark:text-gray-400">Pass Rate</span>
+                        <span class="ml-2 text-green-500" id="passRate">0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Failed Tests</p>
+                        <h3 class="text-2xl font-bold animate-number" id="failedTests">0</h3>
+                    </div>
+                    <div class="p-3 bg-red-100 dark:bg-red-900 rounded-full">
+                        <i class="fas fa-times text-red-600 dark:text-red-300"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div class="flex items-center">
+                        <span class="text-sm text-gray-500 dark:text-gray-400">Failure Rate</span>
+                        <span class="ml-2 text-red-500" id="failRate">0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Release Readiness</p>
+                        <h3 class="text-2xl font-bold" id="releaseScore">0%</h3>
+                    </div>
+                    <div class="release-score">
+                        <svg width="60" height="60" viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r="54" fill="none" stroke="#e2e8f0" stroke-width="12"/>
+                            <circle id="scoreCircle" cx="60" cy="60" r="54" fill="none" stroke="#6366f1" stroke-width="12"
+                                class="score-circle" transform="rotate(-90 60 60)"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Trend Chart -->
+            <div class="card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <h3 class="text-xl font-semibold mb-4 dark:text-white">Test Execution Trend</h3>
+                <div id="trendChart" style="height: 300px;"></div>
+            </div>
+
+            <!-- Module Coverage -->
+            <div class="card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <h3 class="text-xl font-semibold mb-4 dark:text-white">Module Coverage</h3>
+                <div id="coverageHeatmap" style="height: 300px;"></div>
+            </div>
+
+            <!-- Failing Modules -->
+            <div class="card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <h3 class="text-xl font-semibold mb-4 dark:text-white">Top Failing Modules</h3>
+                <div id="failingModulesChart" style="height: 300px;"></div>
+            </div>
+
+            <!-- Flaky Tests -->
+            <div class="card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <h3 class="text-xl font-semibold mb-4 dark:text-white">Flakiest Tests</h3>
+                <div id="flakyTestsChart" style="height: 300px;"></div>
+            </div>
+        </div>
+
+        <!-- AI Recommendations -->
+        <div class="card bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-lg shadow-lg p-6 mb-8">
+            <h3 class="text-xl font-semibold mb-4 text-white flex items-center">
+                <i class="fas fa-robot mr-2"></i>
+                AI Recommendations
+            </h3>
+            <div id="recommendations" class="space-y-4">
+                <!-- Recommendations will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Detailed Test Results -->
+        <div class="card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+            <h3 class="text-xl font-semibold mb-4 dark:text-white">Detailed Test Results</h3>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead>
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Test Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Module</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Duration</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Last 5 Runs</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Flaky Score</th>
+                        </tr>
+                    </thead>
+                    <tbody id="testResultsBody" class="divide-y divide-gray-200 dark:divide-gray-700">
+                        <!-- Test results will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dark mode toggle
+        const darkModeToggle = document.getElementById('darkModeToggle');
+        darkModeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark');
+            const isDark = document.body.classList.contains('dark');
+            darkModeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+        });
+
+        // Animated counters
+        function animateNumber(element, target, duration = 1000) {
+            const start = parseInt(element.textContent);
+            const increment = (target - start) / (duration / 16);
+            let current = start;
+
+            const animate = () => {
+                current += increment;
+                element.textContent = Math.round(current);
+                
+                if ((increment > 0 && current < target) || (increment < 0 && current > target)) {
+                    requestAnimationFrame(animate);
+                } else {
+                    element.textContent = target;
+                }
+            };
+
+            animate();
+        }
+
+        // Release score circle animation
+        function updateReleaseScore(score) {
+            const circle = document.getElementById('scoreCircle');
+            const circumference = 2 * Math.PI * 54;
+            const offset = circumference - (score / 100) * circumference;
+            circle.style.strokeDasharray = circumference;
+            circle.style.strokeDashoffset = offset;
+        }
+
+        // Sample data - Replace with actual API calls
+        const testData = {
+            buildInfo: {
+                number: '#1234',
+                duration: '45m 32s',
+                commitHash: 'a1b2c3d',
+                lastUpdated: new Date().toLocaleString()
+            },
+            metrics: {
+                total: 150,
+                passed: 135,
+                failed: 12,
+                skipped: 3
+            },
+            releaseScore: 89
+        };
+
+        // Update UI with data
+        function updateDashboard(data) {
+            // Build info
+            document.getElementById('buildNumber').textContent = data.buildInfo.number;
+            document.getElementById('buildDuration').textContent = data.buildInfo.duration;
+            document.getElementById('commitHash').textContent = data.buildInfo.commitHash;
+            document.getElementById('lastUpdated').textContent = data.buildInfo.lastUpdated;
+
+            // Metrics
+            animateNumber(document.getElementById('totalTests'), data.metrics.total);
+            animateNumber(document.getElementById('passedTests'), data.metrics.passed);
+            animateNumber(document.getElementById('failedTests'), data.metrics.failed);
+
+            // Calculations
+            const passRate = ((data.metrics.passed / data.metrics.total) * 100).toFixed(1);
+            const failRate = ((data.metrics.failed / data.metrics.total) * 100).toFixed(1);
+
+            document.getElementById('passRate').textContent = passRate + '%';
+            document.getElementById('failRate').textContent = failRate + '%';
+
+            // Release score
+            document.getElementById('releaseScore').textContent = data.releaseScore + '%';
+            updateReleaseScore(data.releaseScore);
+        }
+
+        // Initialize charts
+        function initializeCharts() {
+            // Trend Chart
+            const trendChart = new ApexCharts(document.getElementById('trendChart'), {
+                chart: {
+                    type: 'area',
+                    height: 300,
+                    toolbar: { show: false },
+                    animations: {
+                        enabled: true,
+                        easing: 'easeinout',
+                        speed: 800
+                    }
+                },
+                series: [{
+                    name: 'Passed',
+                    data: [30, 40, 45, 50, 49, 60]
+                }, {
+                    name: 'Failed',
+                    data: [10, 12, 8, 6, 5, 4]
+                }],
+                colors: ['#22c55e', '#ef4444'],
+                fill: {
+                    type: 'gradient',
+                    gradient: {
+                        shadeIntensity: 1,
+                        opacityFrom: 0.7,
+                        opacityTo: 0.3
+                    }
+                },
+                xaxis: {
+                    categories: ['Build 1', 'Build 2', 'Build 3', 'Build 4', 'Build 5', 'Build 6']
+                },
+                theme: { mode: 'dark' }
+            });
+            trendChart.render();
+
+            // Module Coverage Heatmap
+            const coverageData = [
+                ['Module A', 95],
+                ['Module B', 85],
+                ['Module C', 70],
+                ['Module D', 60],
+                ['Module E', 40]
+            ];
+
+            Plotly.newPlot('coverageHeatmap', [{
+                z: [coverageData.map(d => d[1])],
+                x: coverageData.map(d => d[0]),
+                type: 'heatmap',
+                colorscale: 'Viridis'
+            }], {
+                margin: { t: 25, l: 50, r: 25, b: 25 },
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)'
+            });
+
+            // Failing Modules Chart
+            const failingModules = new ApexCharts(document.getElementById('failingModulesChart'), {
+                chart: {
+                    type: 'bar',
+                    height: 300,
+                    toolbar: { show: false }
+                },
+                series: [{
+                    name: 'Failures',
+                    data: [8, 6, 4, 3, 2]
+                }],
+                colors: ['#ef4444'],
+                xaxis: {
+                    categories: ['Module X', 'Module Y', 'Module Z', 'Module W', 'Module V']
+                },
+                theme: { mode: 'dark' }
+            });
+            failingModules.render();
+
+            // Flaky Tests Chart
+            const flakyTests = new ApexCharts(document.getElementById('flakyTestsChart'), {
+                chart: {
+                    type: 'radar',
+                    height: 300,
+                    toolbar: { show: false }
+                },
+                series: [{
+                    name: 'Flakiness Score',
+                    data: [80, 70, 60, 50, 40]
+                }],
+                labels: ['Test A', 'Test B', 'Test C', 'Test D', 'Test E'],
+                theme: { mode: 'dark' }
+            });
+            flakyTests.render();
+        }
+
+        // AI Recommendations
+        function updateRecommendations() {
+            const recommendations = [
+                {
+                    priority: 'high',
+                    message: 'Prioritize fixing authentication tests in Module X',
+                    impact: 'Blocking critical user flows'
+                },
+                {
+                    priority: 'medium',
+                    message: 'Add retries for API integration tests',
+                    impact: 'Reducing flaky failures by 60%'
+                },
+                {
+                    priority: 'medium',
+                    message: 'Increase coverage in payment processing module',
+                    impact: 'Currently at 65%, target 80%'
+                }
+            ];
+
+            const container = document.getElementById('recommendations');
+            container.innerHTML = recommendations.map(rec => `
+                <div class="recommendation-card bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                    <div class="flex items-center mb-2">
+                        <span class="px-2 py-1 text-xs rounded-full ${
+                            rec.priority === 'high' ? 'bg-red-100 text-red-800' :
+                            rec.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
+                        }">
+                            ${rec.priority.toUpperCase()}
+                        </span>
+                    </div>
+                    <p class="text-gray-800 dark:text-gray-200 font-medium">${rec.message}</p>
+                    <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">${rec.impact}</p>
+                </div>
+            `).join('');
+        }
+
+        // Export functionality
+        document.getElementById('exportData').addEventListener('click', () => {
+            // Add export logic here
+            alert('Exporting data...');
+        });
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', () => {
+            updateDashboard(testData);
+            initializeCharts();
+            updateRecommendations();
+        });
+    </script>
+</body>
+</html>
