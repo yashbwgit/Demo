@@ -15,7 +15,8 @@ pipeline {
     stage('Prepare reports') {
       steps {
         bat """
-          if not exist reports mkdir reports
+          if exist reports rd /s /q reports
+          mkdir reports
           xcopy /E /I /Y sample_reports\\* reports\\
           dir reports
         """
