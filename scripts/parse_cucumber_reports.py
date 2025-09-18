@@ -35,34 +35,206 @@ def _extract_reason_from_text(text):
     return None
  
 def parse_cucumber_messages_from_html(text):
-    """Finds window.CUCUMBER_MESSAGES = [ ... ] in html text and returns parsed list or None"""
-    m = re.search(r'window\.CUCUMBER_MESSAGES\s*=\s*(\[[\s\S]*?\])\s*;', text, re.M)
-    if not m:
-        # some reports may omit trailing semicolon
-        m = re.search(r'window\.CUCUMBER_MESSAGES\s*=\s*(\[[\s\S]*\])\s*$', text, re.M)
-    if not m:
-        return None
-    raw = m.group(1)
-    try:
-        # safe load (these cucumber messages are valid JSON in your samples)
-        obj = json.loads(raw)
-        return obj
-    except Exception:
-        # try to be permissive: remove problematic control characters and try again
-        raw2 = re.sub(r'\\x[0-9A-Fa-f]{2}', '', raw)
-        return json.loads(raw2)
+    """Extract test results from either window.MESSAGES or HTML content"""
+    print("Starting file parse...")
+    print(f"File length: {len(text)} characters")
+    
+    # Look for JSON data with more permissive pattern
+    json_patterns = [
+        r'window\.CUCUMBER_MESSAGES\s*=\s*(\[[\s\S]*?\])\s*[;\n]',
+        r'"cucumberJson"\s*:\s*(\[[\s\S]*?\])\s*[,\n}]',
+        r'var\s+jsonReport\s*=\s*(\[[\s\S]*?\])\s*[;\n]'
+    ]
+    
+    for pattern in json_patterns:
+        print(f"Trying pattern: {pattern}")
+        json_match = re.search(pattern, text)
+        if json_match:
+            try:
+                print("Found JSON data, attempting to parse...")
+                json_raw = json_match.group(1)
+                print(f"Raw JSON length: {len(json_raw)} characters")
+                print("First 100 chars:", json_raw[:100])
+                json_data = json.loads(json_raw)
+                print("Successfully parsed JSON")
+                return json_data
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error: {e}")
+    
+    print("No valid JSON found, trying HTML parsing...")
+    
+    if BeautifulSoup is None:
+        raise RuntimeError("BeautifulSoup not installed. Install from requirements.txt")
+    
+    soup = BeautifulSoup(text, 'lxml')
+    print("BeautifulSoup parsed HTML")
+    
+    # Search for various possible test result indicators
+    results = []
+    
+    # Common class patterns for cucumber/test reports
+    test_class_patterns = [
+        'scenario', 'test', 'step', 'feature',
+        'passed', 'failed', 'skipped',
+        'cucumber', 'report', 'result'
+    ]
+    
+    # Find elements by class patterns
+    for pattern in test_class_patterns:
+        elements = soup.find_all(class_=re.compile(pattern, re.I))
+        print(f"Found {len(elements)} elements with class pattern '{pattern}'")
+        for elem in elements:
+            # Try to determine status
+            text = elem.get_text().lower()
+            name = elem.get('name', '') or elem.get('title', '') or text[:120]
+            
+            # Look for status in various attributes and content
+            status = None
+            if any(word in text for word in ['passed', 'success']):
+                status = 'PASSED'
+            elif any(word in text for word in ['failed', 'failure', 'error']):
+                status = 'FAILED'
+            elif any(word in text for word in ['skipped', 'pending']):
+                status = 'SKIPPED'
+            
+            # Only add if we found a status
+            if status:
+                test_case = {
+                    'name': name.strip(),
+                    'status': status,
+                    'error': None
+                }
+                
+                # If failed, try to find error details
+                if status == 'FAILED':
+                    error_elems = elem.find_all(['pre', 'code', 'div'])
+                    error_text = ' '.join(e.get_text().strip() for e in error_elems)
+                    if error_text:
+                        test_case['error'] = error_text[:1000]
+                        
+                results.append({'testCase': test_case})
+                print(f"Added test case: {name[:50]}... ({status})")
+                
+    # If no test cases found, use DOM statistics
+    if not results:
+        print("No test cases found, using text analysis...")
+        all_text = text.lower()
+        passed_count = all_text.count('passed')
+        failed_count = all_text.count('failed')
+        skipped_count = all_text.count('skipped')
+        
+        if passed_count > 0:
+            results.append({'testCase': {'name': 'Passed Tests', 'status': 'PASSED', 'error': None}})
+        if failed_count > 0:
+            results.append({'testCase': {'name': 'Failed Tests', 'status': 'FAILED', 'error': None}})
+        if skipped_count > 0:
+            results.append({'testCase': {'name': 'Skipped Tests', 'status': 'SKIPPED', 'error': None}})
+            
+        print(f"Text analysis found: {passed_count} passed, {failed_count} failed, {skipped_count} skipped")
+    
+    print(f"Final results: {len(results)} test cases")
+    return results
  
 def parse_messages(messages):
-    # Enhanced data structures to capture more information
-    pickle_name_by_id = {}       # 'pickle' objects often contain name
-    testcase_name_by_id = {}     # direct testCase id -> name
-    testcasestarted_to_testcase = {}  # map testCaseStartedId -> testCaseId or pickleId
-    scenario_status = {}         # track scenario-level status
-    feature_info = {}           # store feature details
-    scenario_info = {}          # store scenario details
-    step_info = {}              # store step details
-    scenario_steps = defaultdict(list)  # map scenario id to its steps
-    scenario_duration = defaultdict(float)  # track scenario durations
+    print("\nParsing Cucumber messages...")
+    
+    results = {
+        'total': 0,
+        'passed': 0,
+        'failed': 0,
+        'skipped': 0,
+        'failures': []
+    }
+    
+    # Phase 1: Build execution maps
+    pickles = {}           # pickle_id -> name
+    test_cases = {}       # test_case_id -> pickle_id
+    started_cases = {}    # started_id -> test_case_id
+    case_steps = {}       # started_id -> list of step results
+    errors = {}           # started_id -> first error message
+    
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+            
+        if 'pickle' in msg:
+            pickle = msg['pickle']
+            if 'id' in pickle and 'name' in pickle:
+                pickles[pickle['id']] = pickle['name']
+                print(f"Found scenario: {pickle['name']}")
+                
+        elif 'testCase' in msg:
+            test_case = msg['testCase']
+            if 'id' in test_case and 'pickleId' in test_case:
+                test_cases[test_case['id']] = test_case['pickleId']
+                
+        elif 'testCaseStarted' in msg:
+            started = msg['testCaseStarted']
+            if 'id' in started and 'testCaseId' in started:
+                started_id = started['id']
+                started_cases[started_id] = started['testCaseId']
+                case_steps[started_id] = []
+                
+        elif 'testStepFinished' in msg:
+            step = msg['testStepFinished']
+            started_id = step.get('testCaseStartedId')
+            if started_id:
+                result = step.get('testStepResult', {})
+                status = result.get('status', '').upper()
+                if status:
+                    case_steps[started_id].append(status)
+                    if status == 'FAILED' and started_id not in errors:
+                        error = result.get('message', '')
+                        if error:
+                            errors[started_id] = error
+                            print(f"Found error: {error[:100]}...")
+    
+    print(f"\nFound {len(pickles)} scenarios")
+    
+    # Phase 2: Calculate test results
+    processed = set()
+    for started_id, steps in case_steps.items():
+        if not steps or started_id in processed:
+            continue
+            
+        processed.add(started_id)
+        test_case_id = started_cases.get(started_id)
+        pickle_id = test_cases.get(test_case_id)
+        name = pickles.get(pickle_id, 'Unknown Scenario')
+        
+        # Determine overall status
+        if 'FAILED' in steps:
+            status = 'FAILED'
+        elif all(s == 'SKIPPED' for s in steps):
+            status = 'SKIPPED'
+        elif all(s in ('PASSED', 'UNDEFINED', 'AMBIGUOUS') for s in steps):
+            status = 'PASSED'
+        else:
+            continue  # Skip if we can't determine status
+            
+        results['total'] += 1
+        if status == 'PASSED':
+            results['passed'] += 1
+            print(f"Scenario passed: {name}")
+        elif status == 'FAILED':
+            results['failed'] += 1
+            print(f"Scenario failed: {name}")
+            results['failures'].append({
+                'name': name,
+                'error': errors.get(started_id, 'Test failed with no error message')
+            })
+        elif status == 'SKIPPED':
+            results['skipped'] += 1
+            print(f"Scenario skipped: {name}")
+    
+    print(f"\nFinal results - Total: {results['total']}, Passed: {results['passed']}, Failed: {results['failed']}, Skipped: {results['skipped']}")
+    return results
+    
+    print(f"\nFinal results - Total: {results['total']}, Passed: {results['passed']}, Failed: {results['failed']}, Skipped: {results['skipped']}")
+    return results
+    
+    print(f"\nFinal results - Total: {results['total']}, Passed: {results['passed']}, Failed: {results['failed']}, Skipped: {results['skipped']}")
+    return results
     
     failures = []
     counts = Counter()
@@ -215,95 +387,137 @@ def parse_messages(messages):
     }
  
 def fallback_dom_parse(html_path):
+    """Parse the HTML file directly using BeautifulSoup when other methods fail"""
     if BeautifulSoup is None:
         raise RuntimeError("BeautifulSoup not installed. Install from requirements.txt")
     with open(html_path, 'r', encoding='utf-8', errors='ignore') as fh:
-        soup = BeautifulSoup(fh, 'lxml')
- 
-    nodes = soup.find_all(attrs={"data-status": True})
-    summary = {'total': 0, 'passed': 0, 'failed': 0, 'skipped': 0, 'failures': []}
-    fail_counter = Counter()
-    for n in nodes:
-        status = (n.get('data-status') or '').upper()
-        summary['total'] += 1
-        if 'PASS' in status:
-            summary['passed'] += 1
-        elif 'SKIP' in status:
-            summary['skipped'] += 1
-        elif 'FAIL' in status:
-            summary['failed'] += 1
-            name = n.get('data-name') or (n.get_text()[:120].strip() or "Unnamed")
-            # check for pre/code children for trace
-            trace_parts = []
-            for p in n.find_all(['pre', 'code', 'div']):
-                txt = p.get_text(separator="\n").strip()
-                if txt:
-                    trace_parts.append(txt)
-            trace = "\n".join(trace_parts)[:5000]
-            reason = _extract_reason_from_text(trace) or "Unknown failure"
-            summary['failures'].append({'name': name, 'reason': reason, 'trace': trace})
-            fail_counter[reason] += 1
- 
-    summary['top_failure_reasons'] = [{'reason': r, 'count': c} for r, c in fail_counter.most_common(10)]
-    return summary
+        text = fh.read()
+        
+    # Try to find test results in HTML
+    messages = parse_cucumber_messages_from_html(text)
+    if messages:
+        return parse_messages(messages)
+    
+    # If no structured data found, try a more aggressive search
+    soup = BeautifulSoup(text, 'lxml')
+    
+    results = {
+        'total': 0,
+        'passed': 0,
+        'failed': 0,
+        'skipped': 0,
+        'failures': []
+    }
+    
+    # Look for elements that might indicate test results
+    all_text = soup.get_text().lower()
+    
+    # Count keyword occurrences as a last resort
+    results['passed'] = all_text.count('passed')
+    results['failed'] = all_text.count('failed')
+    results['skipped'] = all_text.count('skipped')
+    results['total'] = results['passed'] + results['failed'] + results['skipped']
+    
+    # Try to find failure messages
+    error_containers = soup.find_all(['pre', 'code', 'div'], 
+                                   text=re.compile(r'error|exception|fail', re.I))
+    
+    for container in error_containers:
+        error_text = container.get_text().strip()
+        if error_text:
+            results['failures'].append({
+                'name': 'Unknown Test',
+                'error': error_text[:1000]
+            })
+            
+    return results
  
 def aggregate_reports(paths):
-    agg_failures = []
-    agg_counts = Counter()
-    agg_top_reasons = Counter()
-    files_parsed = 0
+    total_results = {
+        'total': 0,
+        'passed': 0,
+        'failed': 0,
+        'skipped': 0,
+        'failures': [],
+        'files_parsed': 0
+    }
  
     for p in paths:
-        files_parsed += 1
+        total_results['files_parsed'] += 1
         text = p.read_text(encoding='utf-8', errors='ignore')
         messages = parse_cucumber_messages_from_html(text)
         if messages:
             res = parse_messages(messages)
-            # update counters
-            # parse_messages returns counts keyed by step status
-            counts = res.get('counts') or {}
-            for k, v in counts.items():
-                agg_counts[k] += v
-            for f in res.get('failures', []):
-                agg_failures.append({'file': str(p.name), **f})
-                agg_top_reasons[f.get('reason')] += 1
+            # Update totals
+            total_results['total'] += res['total']
+            total_results['passed'] += res['passed']
+            total_results['failed'] += res['failed']
+            total_results['skipped'] += res['skipped']
+            # Add failures with file info
+            for failure in res['failures']:
+                total_results['failures'].append({
+                    'file': str(p.name),
+                    **failure
+                })
         else:
             # fallback DOM parsing
             res = fallback_dom_parse(p)
-            agg_counts['PASSED'] += res.get('passed', 0)
-            agg_counts['FAILED'] += res.get('failed', 0)
-            agg_counts['SKIPPED'] += res.get('skipped', 0)
-            for f in res.get('failures', []):
-                agg_failures.append({'file': str(p.name), **f})
-                agg_top_reasons[f.get('reason')] += 1
- 
-    aggregated = {
-        'files_parsed': files_parsed,
-        'counts': dict(agg_counts),
-        'total_failures': len(agg_failures),
-        'failures': agg_failures,
-        'top_failure_reasons': [{'reason': r, 'count': c} for r, c in agg_top_reasons.most_common(10)]
-    }
-    return aggregated
+            total_results['total'] += res['total']
+            total_results['passed'] += res['passed']
+            total_results['failed'] += res['failed']
+            total_results['skipped'] += res['skipped']
+            for failure in res['failures']:
+                total_results['failures'].append({
+                    'file': str(p.name),
+                    **failure
+                })
+    
+    return total_results
  
 def write_outputs(agg, json_out_path, md_path='summary.md'):
     with open(json_out_path, 'w', encoding='utf-8') as fh:
         json.dump(agg, fh, indent=2, ensure_ascii=False)
  
+    # Calculate pass percentage
+    total = agg.get('total', 0)
+    passed = agg.get('passed', 0)
+    failed = agg.get('failed', 0)
+    skipped = agg.get('skipped', 0)
+    pass_rate = (passed / total * 100) if total > 0 else 0
+    
     # markdown summary
     md = []
-    md.append("# QA Automated Summary\n")
-    md.append(f"- Files parsed: {agg.get('files_parsed')}")
-    c = agg.get('counts', {})
-    md.append(f"- Passed: {c.get('PASSED',0)}  •  Failed: {c.get('FAILED',0)}  •  Skipped: {c.get('SKIPPED',0)}\n")
-    md.append("## Top failure reasons")
-    for r in agg.get('top_failure_reasons', [])[:5]:
-        md.append(f"- {r['reason']} (count: {r['count']})")
-    md.append("\n## Top failing tests (first 10)")
-    for f in agg.get('failures', [])[:10]:
-        md.append(f"- {f.get('file')}: {f.get('name')} — {f.get('reason')}")
+    md.append("# Test Execution Summary\n")
+    md.append(f"- Files parsed: {agg.get('files_parsed', 1)}")
+    md.append(f"- Total tests: {total}")
+    md.append(f"- Pass rate: {pass_rate:.1f}%")
+    md.append(f"- Results breakdown:")
+    md.append(f"  - ✅ Passed: {passed}")
+    md.append(f"  - ❌ Failed: {failed}")
+    md.append(f"  - ⚠️ Skipped: {skipped}\n")
+    
+    # Add failure details
+    if agg.get('failures'):
+        md.append("## Failed Tests")
+        for i, failure in enumerate(agg.get('failures', []), 1):
+            md.append(f"\n### {i}. {failure.get('name', 'Unnamed Test')}")
+            if failure.get('error'):
+                # Format error message for better readability
+                error_lines = failure['error'].splitlines()
+                if len(error_lines) > 1:
+                    md.append("\n<details>")
+                    md.append("<summary>Error Details</summary>\n")
+                    md.append("```")
+                    md.extend(error_lines[:20])  # Show first 20 lines
+                    if len(error_lines) > 20:
+                        md.append("...")
+                    md.append("```")
+                    md.append("</details>")
+                else:
+                    md.append(f"\nError: `{failure['error']}`")
+    
     with open(md_path, 'w', encoding='utf-8') as fh:
-        fh.write("\n\n".join(md))
+        fh.write("\n".join(md))
  
 def main():
     parser = argparse.ArgumentParser()
