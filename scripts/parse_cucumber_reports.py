@@ -53,26 +53,57 @@ def parse_cucumber_messages_from_html(text):
         return json.loads(raw2)
  
 def parse_messages(messages):
-    # heuristics: gather mapping from various ids -> scenario name
+    # Enhanced data structures to capture more information
     pickle_name_by_id = {}       # 'pickle' objects often contain name
     testcase_name_by_id = {}     # direct testCase id -> name
     testcasestarted_to_testcase = {}  # map testCaseStartedId -> testCaseId or pickleId
     scenario_status = {}         # track scenario-level status
- 
+    feature_info = {}           # store feature details
+    scenario_info = {}          # store scenario details
+    step_info = {}              # store step details
+    scenario_steps = defaultdict(list)  # map scenario id to its steps
+    scenario_duration = defaultdict(float)  # track scenario durations
+    
     failures = []
     counts = Counter()
- 
-    # first pass: collect names from messages that declare names
+    
+    # first pass: collect feature and scenario information
     for msg in messages:
         if not isinstance(msg, dict):
             continue
-        # pickles
+            
+        # Extract feature information
+        if 'gherkinDocument' in msg:
+            doc = msg.get('gherkinDocument', {})
+            feature = doc.get('feature', {})
+            if feature and isinstance(feature, dict):
+                fid = feature.get('id')
+                if fid:
+                    feature_info[fid] = {
+                        'name': feature.get('name', 'Unknown Feature'),
+                        'description': feature.get('description', ''),
+                        'tags': [t.get('name') for t in feature.get('tags', []) if isinstance(t, dict)],
+                        'scenarios': []
+                    }
+        
+        # Extract pickle (compiled scenario) information
         if 'pickle' in msg and isinstance(msg['pickle'], dict):
             p = msg['pickle']
             pid = p.get('id')
             name = p.get('name') or p.get('uri') or None
             if pid and name:
                 pickle_name_by_id[pid] = name
+                # Store detailed scenario information
+                scenario_info[pid] = {
+                    'name': name,
+                    'tags': [t.get('name') for t in p.get('tags', []) if isinstance(t, dict)],
+                    'steps': []
+                }
+                # Link scenario to feature
+                if p.get('astNodeIds'):
+                    for fid in p.get('astNodeIds', []):
+                        if fid in feature_info:
+                            feature_info[fid]['scenarios'].append(pid)
  
         # some messages may contain 'testCase' directly
         if 'testCase' in msg and isinstance(msg['testCase'], dict):
@@ -134,6 +165,30 @@ def parse_messages(messages):
                 scenario_status[tcs_id] = status
                 counts[status] += 1  # count at scenario level
  
+    # Process and organize all collected information
+    feature_summary = []
+    for fid, feature in feature_info.items():
+        feature_scenarios = []
+        for sid in feature.get('scenarios', []):
+            if sid in scenario_info:
+                scenario = scenario_info[sid].copy()
+                scenario['steps'] = [step_info[step_id] for step_id in scenario_steps[sid] if step_id in step_info]
+                scenario['duration'] = scenario_duration[sid]
+                scenario['status'] = scenario_status.get(sid, '')
+                feature_scenarios.append(scenario)
+        
+        feature_summary.append({
+            'name': feature.get('name', 'Unknown Feature'),
+            'description': feature.get('description', ''),
+            'tags': feature.get('tags', []),
+            'scenarios': feature_scenarios,
+            'total_scenarios': len(feature_scenarios),
+            'passed_scenarios': sum(1 for s in feature_scenarios if s['status'] == 'PASSED'),
+            'failed_scenarios': sum(1 for s in feature_scenarios if s['status'] == 'FAILED'),
+            'skipped_scenarios': sum(1 for s in feature_scenarios if s['status'] == 'SKIPPED'),
+            'total_duration': sum(s['duration'] for s in feature_scenarios)
+        })
+
     # Reset counts to use scenario-level status
     counts = Counter(scenario_status.values())
     total = sum(counts.values()) if counts else None
@@ -141,10 +196,20 @@ def parse_messages(messages):
     # aggregate top reasons
     reason_counter = Counter([f['reason'] for f in failures if f.get('reason')])
     top_reasons = [{'reason': r, 'count': c} for r, c in reason_counter.most_common(10)]
+
+    # Calculate overall statistics
+    total_duration = sum(d for d in scenario_duration.values())
+    avg_duration = total_duration / len(scenario_duration) if scenario_duration else 0
  
     return {
-        'total_steps_recorded': total,
-        'counts': dict(counts),
+        'summary': {
+            'total_features': len(feature_summary),
+            'total_scenarios': total,
+            'counts': dict(counts),
+            'total_duration': total_duration,
+            'average_scenario_duration': avg_duration
+        },
+        'features': feature_summary,
         'failures': failures,
         'top_failure_reasons': top_reasons
     }
