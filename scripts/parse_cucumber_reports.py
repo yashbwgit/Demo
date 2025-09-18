@@ -338,6 +338,27 @@ def test_history():
     conn.close()
     return jsonify(df.to_dict('records'))
 
+def ensure_db():
+    """Ensure database exists and has correct schema"""
+    db_file = Path('test_history.db')
+    is_new_db = not db_file.exists()
+    
+    # Initialize database if it doesn't exist or we can't query the schema
+    try:
+        if is_new_db:
+            init_db()
+        else:
+            # Verify schema exists
+            conn = sqlite3.connect('test_history.db')
+            c = conn.cursor()
+            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='test_runs'")
+            if not c.fetchone():
+                init_db()
+            conn.close()
+    except sqlite3.Error:
+        # If any error occurs, reinitialize the database
+        init_db()
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', required=True, help='HTML file or directory of html reports')
@@ -345,8 +366,10 @@ def main():
     parser.add_argument('--dashboard', action='store_true', help='Start the dashboard web server')
     args = parser.parse_args()
 
+    # Ensure database exists and has correct schema
+    ensure_db()
+
     if args.dashboard:
-        init_db()
         app.run(debug=True)
         return
 
@@ -361,7 +384,11 @@ def main():
 
     agg = aggregate_reports(files)
     write_outputs(agg, args.output, md_path='summary.md')
-    store_test_run(agg)  # Store results in database
+    try:
+        store_test_run(agg)  # Store results in database
+    except sqlite3.Error as e:
+        print(f"Warning: Could not store results in database: {e}", flush=True)
+        # Continue execution even if database storage fails
     print("Wrote:", args.output, "and summary.md")
     print("Totals:", agg.get('counts'))
     print("To view the dashboard, run with --dashboard flag")
