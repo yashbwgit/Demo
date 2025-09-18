@@ -1,2 +1,6 @@
 beautifulsoup4
 lxml
+pandas
+numpy
+plotly
+chart.js

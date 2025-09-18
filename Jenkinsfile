@@ -103,8 +103,8 @@ pipeline {
             }
             post {
                 always {
-                    // Archive artifacts (JSON + MD summary)
-                    archiveArtifacts artifacts: 'report_summary.json,summary.md', fingerprint: true
+                    // Archive artifacts (JSON + MD summary + Dashboards)
+                    archiveArtifacts artifacts: 'report_summary.json,summary.md,dashboard.html,scripts/templates/modern_dashboard.html', fingerprint: true
                 }
             }
         }
