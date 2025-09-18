@@ -5,18 +5,49 @@ parse_cucumber_reports.py
 - Output:
     - report_summary.json  (aggregated structured output)
     - summary.md            (short human-readable summary)
+    - Interactive dashboard (when run with --dashboard flag)
 """
 import argparse
 import json
 import re
 from pathlib import Path
 from collections import Counter, defaultdict
+from datetime import datetime
+import sqlite3
+from flask import Flask, render_template, jsonify, request
+import plotly.express as px
+import plotly.graph_objects as go
+import pandas as pd
+
+# Create Flask app
+app = Flask(__name__)
 
 # optional fallback parsing
 try:
     from bs4 import BeautifulSoup
 except Exception:
     BeautifulSoup = None
+
+# Database setup
+def init_db():
+    conn = sqlite3.connect('test_history.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS test_runs
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  timestamp TEXT,
+                  total_tests INTEGER,
+                  passed INTEGER,
+                  failed INTEGER,
+                  skipped INTEGER)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS test_failures
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  run_id INTEGER,
+                  test_name TEXT,
+                  failure_reason TEXT,
+                  file_name TEXT,
+                  FOREIGN KEY (run_id) REFERENCES test_runs(id))''')
+    conn.commit()
+    conn.close()
 
 EXC_RE = re.compile(r'([A-Za-z0-9_.]+(?:Exception|Error|Failure))(?:[:\s-]+)?(.+)?', re.I)
 
@@ -177,11 +208,43 @@ def fallback_dom_parse(html_path):
     summary['top_failure_reasons'] = [{'reason': r, 'count': c} for r, c in fail_counter.most_common(10)]
     return summary
 
+def store_test_run(agg_data):
+    """Store test run data in SQLite database"""
+    conn = sqlite3.connect('test_history.db')
+    c = conn.cursor()
+    
+    # Insert test run
+    c.execute('''INSERT INTO test_runs 
+                 (timestamp, total_tests, passed, failed, skipped)
+                 VALUES (?, ?, ?, ?, ?)''',
+              (datetime.now().isoformat(),
+               sum(agg_data['counts'].values()),
+               agg_data['counts'].get('PASSED', 0),
+               agg_data['counts'].get('FAILED', 0),
+               agg_data['counts'].get('SKIPPED', 0)))
+    
+    run_id = c.lastrowid
+    
+    # Insert failures
+    for failure in agg_data.get('failures', []):
+        c.execute('''INSERT INTO test_failures
+                     (run_id, test_name, failure_reason, file_name)
+                     VALUES (?, ?, ?, ?)''',
+                  (run_id,
+                   failure.get('name', 'Unknown'),
+                   failure.get('reason', 'Unknown'),
+                   failure.get('file', 'Unknown')))
+    
+    conn.commit()
+    conn.close()
+
 def aggregate_reports(paths):
     agg_failures = []
     agg_counts = Counter()
     agg_top_reasons = Counter()
     files_parsed = 0
+    execution_times = []
+    flaky_tests = set()
 
     for p in paths:
         files_parsed += 1
@@ -190,13 +253,15 @@ def aggregate_reports(paths):
         if messages:
             res = parse_messages(messages)
             # update counters
-            # parse_messages returns counts keyed by step status
             counts = res.get('counts') or {}
             for k, v in counts.items():
                 agg_counts[k] += v
             for f in res.get('failures', []):
                 agg_failures.append({'file': str(p.name), **f})
                 agg_top_reasons[f.get('reason')] += 1
+                # Track potential flaky tests (timeouts, race conditions)
+                if 'timeout' in f.get('reason', '').lower() or 'race condition' in f.get('reason', '').lower():
+                    flaky_tests.add(f.get('name', 'Unknown'))
         else:
             # fallback DOM parsing
             res = fallback_dom_parse(p)
@@ -235,11 +300,55 @@ def write_outputs(agg, json_out_path, md_path='summary.md'):
     with open(md_path, 'w', encoding='utf-8') as fh:
         fh.write("\n\n".join(md))
 
+# Flask routes
+@app.route('/')
+def dashboard():
+    conn = sqlite3.connect('test_history.db')
+    df = pd.read_sql_query('''
+        SELECT timestamp, total_tests, passed, failed, skipped
+        FROM test_runs ORDER BY timestamp DESC LIMIT 10
+    ''', conn)
+    
+    # Create visualizations
+    trend_fig = px.line(df, x='timestamp', y=['passed', 'failed', 'skipped'],
+                        title='Test Results Trend')
+    
+    # Get latest failure data
+    failures_df = pd.read_sql_query('''
+        SELECT f.failure_reason, COUNT(*) as count
+        FROM test_failures f
+        JOIN test_runs r ON f.run_id = r.id
+        GROUP BY f.failure_reason
+        ORDER BY count DESC LIMIT 5
+    ''', conn)
+    
+    failure_pie = px.pie(failures_df, values='count', names='failure_reason',
+                        title='Top Failure Reasons')
+    
+    conn.close()
+    
+    return render_template('dashboard.html',
+                         trend_plot=trend_fig.to_html(full_html=False),
+                         failure_plot=failure_pie.to_html(full_html=False))
+
+@app.route('/api/test-history')
+def test_history():
+    conn = sqlite3.connect('test_history.db')
+    df = pd.read_sql_query('SELECT * FROM test_runs ORDER BY timestamp DESC', conn)
+    conn.close()
+    return jsonify(df.to_dict('records'))
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', required=True, help='HTML file or directory of html reports')
     parser.add_argument('-o', '--output', default='report_summary.json', help='output json file (default: report_summary.json)')
+    parser.add_argument('--dashboard', action='store_true', help='Start the dashboard web server')
     args = parser.parse_args()
+
+    if args.dashboard:
+        init_db()
+        app.run(debug=True)
+        return
 
     p = Path(args.input)
     if p.is_dir():
@@ -252,8 +361,10 @@ def main():
 
     agg = aggregate_reports(files)
     write_outputs(agg, args.output, md_path='summary.md')
+    store_test_run(agg)  # Store results in database
     print("Wrote:", args.output, "and summary.md")
     print("Totals:", agg.get('counts'))
+    print("To view the dashboard, run with --dashboard flag")
 
 if __name__ == '__main__':
     main()
