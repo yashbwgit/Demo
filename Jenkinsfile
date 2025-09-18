@@ -120,7 +120,7 @@ pipeline {
                         emailext (
                             subject: "POC QA Summary - Build ${env.BUILD_NUMBER}",
                             body: """<pre>${summaryText}</pre>""",
-                            to: "${params.EMAIL_TO ?: 'client@example.com'}"
+                            to: "${params.EMAIL_TO ?: 'yash.gokakkar@bitwiseglobal.com'}"
                         )
                     } else {
                         echo "SEND_EMAIL != true - not sending email."
