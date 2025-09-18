@@ -1,7 +1,7 @@
 pipeline {
   agent any
   environment {
-    py = "python3"
+    py = "py"
   }
   stages {
     stage('Checkout') {
