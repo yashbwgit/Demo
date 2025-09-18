@@ -57,6 +57,7 @@ def parse_messages(messages):
     pickle_name_by_id = {}       # 'pickle' objects often contain name
     testcase_name_by_id = {}     # direct testCase id -> name
     testcasestarted_to_testcase = {}  # map testCaseStartedId -> testCaseId or pickleId
+    scenario_status = {}         # track scenario-level status
  
     failures = []
     counts = Counter()
@@ -127,10 +128,14 @@ def parse_messages(messages):
         # also find high-level testCaseFinished events (sometimes include status)
         elif 'testCaseFinished' in msg and isinstance(msg['testCaseFinished'], dict):
             res = msg['testCaseFinished'].get('testCaseResult') or {}
+            tcs_id = msg['testCaseFinished'].get('testCaseStartedId')
             status = (res.get('status') or '').upper()
-            counts[status] += 0  # no-op; we prefer step-level info
+            if tcs_id:
+                scenario_status[tcs_id] = status
+                counts[status] += 1  # count at scenario level
  
-    # totals: fallback if no structured events found
+    # Reset counts to use scenario-level status
+    counts = Counter(scenario_status.values())
     total = sum(counts.values()) if counts else None
  
     # aggregate top reasons
