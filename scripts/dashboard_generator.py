@@ -401,30 +401,35 @@ def make_html(metrics,analysis):
 <meta charset="utf-8">
 <title>QA Test Results Dashboard</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
+/* Base Colors and Variables */
 :root {{
-  --primary: #0072ff;
-  --primary-light: #00c6ff;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --text: #1f2937;
-  --text-light: #6b7280;
+    --blue: #2563eb;
+    --indigo: #4338ca;
+    --green: #059669;
+    --red: #dc2626;
+    --yellow: #d97706;
+    --bg-light: #f3f4f6;
+    --shadow: rgba(0, 0, 0, 0.1);
 }}
+/* Core Styles */
 body {{
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  margin: 0;
-  background: #f8fafc;
-  color: var(--text);
-  line-height: 1.5;
+    font-family: 'Roboto', -apple-system, sans-serif !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: var(--bg-light) !important;
+    color: #1a1a1a !important;
+    line-height: 1.6 !important;
 }}
+
 header {{
-  background: linear-gradient(135deg, var(--primary), var(--primary-light));
-  padding: 2rem;
-  color: #fff;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    background: linear-gradient(to right, var(--blue), var(--indigo)) !important;
+    color: white !important;
+    padding: 24px !important;
+    text-align: center !important;
+    box-shadow: 0 4px 6px var(--shadow) !important;
 }}
 header h1 {{
   margin: 0;
@@ -432,24 +437,31 @@ header h1 {{
   font-weight: 700;
   letter-spacing: -0.025em;
 }}
+/* Layout */
 .container {{
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 2rem;
+    max-width: 1200px !important;
+    margin: 0 auto !important;
+    padding: 20px !important;
 }}
+
 .row {{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-  margin-top: 1.5rem;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 20px !important;
+    margin-top: 20px !important;
+    width: 100% !important;
 }}
+
+/* Cards */
 .card {{
-  background: #fff;
-  flex: 1 1 320px;
-  padding: 1.5rem;
-  border-radius: 1rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s ease;
+    background: white !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 6px var(--shadow) !important;
+    padding: 20px !important;
+    flex: 1 1 300px !important;
+    min-width: 300px !important;
+    margin-bottom: 20px !important;
+    border: 1px solid #e5e7eb !important;
 }}
 .card:hover {{
   transform: translateY(-2px);
@@ -464,27 +476,43 @@ header h1 {{
   align-items: center;
   gap: 0.75rem;
 }}
+/* Metrics and Badges */
 .badge {{
-  display: inline-flex;
-  align-items: center;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  font-size: 0.875rem;
-  line-height: 1;
-  letter-spacing: 0.025em;
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important;
+    font-weight: bold !important;
+    font-size: 14px !important;
+    margin: 5px 0 !important;
+    min-width: 100px !important;
+    justify-content: center !important;
 }}
+
 .green {{
-  background: rgba(16, 185, 129, 0.1);
-  color: var(--success);
+    background-color: #dcfce7 !important;
+    color: var(--green) !important;
+    border: 1px solid #86efac !important;
 }}
+
 .red {{
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--danger);
+    background-color: #fee2e2 !important;
+    color: var(--red) !important;
+    border: 1px solid #fca5a5 !important;
 }}
+
 .orange {{
-  background: rgba(245, 158, 11, 0.1);
-  color: var(--warning);
+    background-color: #ffedd5 !important;
+    color: var(--yellow) !important;
+    border: 1px solid #fdba74 !important;
+}}
+
+.metric {{
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 10px 0 !important;
+    border-bottom: 1px solid #e5e7eb !important;
 }}
 .card h3 {{
   margin: 0 0 1rem;
@@ -502,24 +530,51 @@ pre {{
   font-size: 0.875rem;
   line-height: 1.7;
 }}
+/* Headings and Text */
+h1 {{
+    font-size: 28px !important;
+    font-weight: 700 !important;
+    margin: 0 !important;
+}}
+
+h3 {{
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    color: #111827 !important;
+    margin-bottom: 20px !important;
+    padding-bottom: 10px !important;
+    border-bottom: 2px solid #e5e7eb !important;
+}}
+
+/* Details and Summary */
 details {{
-  margin-bottom: 1rem;
+    margin-bottom: 15px !important;
+    background: #f9fafb !important;
+    border-radius: 8px !important;
+    padding: 10px !important;
 }}
+
 details summary {{
-  cursor: pointer;
-  font-weight: 500;
-  padding: 0.5rem 0;
-  user-select: none;
+    cursor: pointer !important;
+    font-weight: 500 !important;
+    padding: 10px !important;
+    background: white !important;
+    border-radius: 6px !important;
+    border: 1px solid #e5e7eb !important;
 }}
+
 details summary:hover {{
-  color: var(--primary);
+    background: #f3f4f6 !important;
+    border-color: #d1d5db !important;
 }}
+
+/* Hints and Tips */
 .hint {{
-  margin-top: 1rem;
-  padding: 1rem;
-  border-left: 4px solid var(--primary);
-  background: rgba(0, 114, 255, 0.05);
-  border-radius: 0.5rem;
+    margin-top: 15px !important;
+    padding: 15px !important;
+    background-color: #eff6ff !important;
+    border-left: 4px solid var(--blue) !important;
+    border-radius: 6px !important;
 }}
 .hint b {{
   color: var(--text);
@@ -546,23 +601,25 @@ li:last-child {{
 <header><h1>QA Test Results Dashboard</h1></header>
 <div class="container">
 <div class="row">
-  <div class="card metrics-card" style="flex:0 0 300px">
-    <h3>Executive Summary</h3>
-    <div class="metric">
-      <div>Total Tests</div>
-      <div style="margin-left:auto;font-size:1.5rem;font-weight:600">{total}</div>
+  <div class="card" style="flex:0 0 320px !important; background: white !important; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;">
+    <h3 style="margin-bottom: 20px !important; padding-bottom: 10px !important; border-bottom: 2px solid #e5e7eb !important;">Executive Summary</h3>
+    <div style="background: #f8fafc !important; padding: 15px !important; border-radius: 8px !important; margin-bottom: 20px !important;">
+      <div style="font-size: 36px !important; font-weight: bold !important; color: #1e40af !important; text-align: center !important;">{total}</div>
+      <div style="text-align: center !important; color: #6b7280 !important; font-size: 14px !important;">Total Tests</div>
     </div>
-    <div class="metric">
-      <span class="badge green">✓ Passed</span>
-      <span style="margin-left:auto;font-weight:500">{passed}</span>
-    </div>
-    <div class="metric">
-      <span class="badge red">⨯ Failed</span>
-      <span style="margin-left:auto;font-weight:500">{failed}</span>
-    </div>
-    <div class="metric">
-      <span class="badge orange">! Skipped</span>
-      <span style="margin-left:auto;font-weight:500">{skipped}</span>
+    <div style="display: grid !important; gap: 10px !important;">
+      <div class="metric" style="background: #f0fdf4 !important; padding: 15px !important; border-radius: 8px !important;">
+        <span class="badge green" style="font-size: 16px !important;">✓ Passed</span>
+        <span style="font-size: 20px !important; font-weight: bold !important; color: #059669 !important;">{passed}</span>
+      </div>
+      <div class="metric" style="background: #fef2f2 !important; padding: 15px !important; border-radius: 8px !important;">
+        <span class="badge red" style="font-size: 16px !important;">⨯ Failed</span>
+        <span style="font-size: 20px !important; font-weight: bold !important; color: #dc2626 !important;">{failed}</span>
+      </div>
+      <div class="metric" style="background: #fffbeb !important; padding: 15px !important; border-radius: 8px !important;">
+        <span class="badge orange" style="font-size: 16px !important;">! Skipped</span>
+        <span style="font-size: 20px !important; font-weight: bold !important; color: #d97706 !important;">{skipped}</span>
+      </div>
     </div>
     <div style="margin-top:0.5rem;padding-top:1rem;border-top:1px solid rgba(0,0,0,0.05)">
       <div class="metric">
@@ -611,9 +668,12 @@ li:last-child {{
     htmlfrag+=f"""
 <script>
 const ctx = document.getElementById('reasonsChart').getContext('2d');
+Chart.defaults.font.family = 'Roboto, sans-serif';
+Chart.defaults.font.size = 13;
+
 const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-gradient.addColorStop(0, 'rgba(239, 68, 68, 0.8)');
-gradient.addColorStop(1, 'rgba(239, 68, 68, 0.4)');
+gradient.addColorStop(0, '#3b82f6');  // Bright blue
+gradient.addColorStop(1, '#60a5fa');  // Lighter blue
 
 new Chart(ctx, {{
   type: 'bar',
