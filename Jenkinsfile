@@ -7,11 +7,13 @@ pipeline {
     stage('Checkout') {
       steps { checkout scm }
     }
+
     stage('Install deps') {
       steps {
         bat "${env.py} -m pip install -q -r requirements.txt"
       }
     }
+
     stage('Prepare reports') {
       steps {
         bat """
@@ -22,6 +24,7 @@ pipeline {
         """
       }
     }
+
     stage('Run parser') {
       steps {
         bat "${env.py} scripts\\parse_cucumber_reports.py -i reports -o report_summary.json"
@@ -33,13 +36,26 @@ pipeline {
         }
       }
     }
+
+    /* >>> New Stage here <<< */
+    stage('Generate Dashboard') {
+      steps {
+        bat "${env.py} scripts\\dashboard_generator.py report_summary.json dashboard.html"
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'dashboard.html', fingerprint: true
+        }
+      }
+    }
+    /* >>> End of new stage <<< */
+
     stage('Send summary (email)') {
       steps {
         script {
           // option A: use email-ext plugin if installed - you must configure SMTP in Jenkins
           def summaryText = readFile('summary.md')
           if (env.SEND_EMAIL == 'true') {
-            // If you have the Email Extension plugin
             emailext (
               subject: "POC QA Summary - Build ${env.BUILD_NUMBER}",
               body: """<pre>${summaryText}</pre>""",
@@ -54,5 +70,3 @@ pipeline {
     }
   }
 }
-
-
