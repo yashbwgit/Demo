@@ -399,50 +399,195 @@ def make_html(metrics,analysis):
     htmlfrag=f"""<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
-<title>QA Dashboard</title>
+<title>QA Test Results Dashboard</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-body{{font-family:'Inter',sans-serif;margin:0;background:#f4f6fb;color:#222}}
-header{{background:linear-gradient(90deg,#0072ff,#00c6ff);padding:20px;color:#fff}}
-header h1{{margin:0;font-size:1.8em}}
-.container{{padding:20px;max-width:1400px;margin:auto}}
-.row{{display:flex;flex-wrap:wrap;gap:20px;margin-top:20px}}
-.card{{background:#fff;flex:1 1 320px;padding:20px;border-radius:12px;box-shadow:0 3px 6px rgba(0,0,0,0.08);transition:transform .2s}}
-.card:hover{{transform:translateY(-3px)}}
-.badge{{display:inline-block;padding:6px 10px;border-radius:6px;font-weight:600}}
-.green{{background:#e6f4ea;color:#086b19}}
-.red{{background:#ffecec;color:#7a1212}}
-.orange{{background:#fff4e6;color:#8a4b00}}
-pre{{background:#0f1724;color:#e6eef8;padding:10px;border-radius:8px;overflow:auto;max-height:240px}}
-details summary{{cursor:pointer;font-weight:600}}
-.hint{{margin-top:8px;padding:10px;border-left:4px solid #0072ff;background:#f0f7ff;border-radius:6px}}
-ul{{padding-left:18px}}
+:root {{
+  --primary: #0072ff;
+  --primary-light: #00c6ff;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --text: #1f2937;
+  --text-light: #6b7280;
+}}
+body {{
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  margin: 0;
+  background: #f8fafc;
+  color: var(--text);
+  line-height: 1.5;
+}}
+header {{
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  padding: 2rem;
+  color: #fff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}}
+header h1 {{
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}}
+.container {{
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem;
+}}
+.row {{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}}
+.card {{
+  background: #fff;
+  flex: 1 1 320px;
+  padding: 1.5rem;
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}}
+.card:hover {{
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}}
+.metrics-card {{
+  display: grid;
+  gap: 1rem;
+}}
+.metric {{
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}}
+.badge {{
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1;
+  letter-spacing: 0.025em;
+}}
+.green {{
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}}
+.red {{
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+}}
+.orange {{
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+}}
+.card h3 {{
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text);
+}}
+pre {{
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  overflow: auto;
+  max-height: 240px;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}}
+details {{
+  margin-bottom: 1rem;
+}}
+details summary {{
+  cursor: pointer;
+  font-weight: 500;
+  padding: 0.5rem 0;
+  user-select: none;
+}}
+details summary:hover {{
+  color: var(--primary);
+}}
+.hint {{
+  margin-top: 1rem;
+  padding: 1rem;
+  border-left: 4px solid var(--primary);
+  background: rgba(0, 114, 255, 0.05);
+  border-radius: 0.5rem;
+}}
+.hint b {{
+  color: var(--text);
+  display: block;
+  margin-bottom: 0.25rem;
+}}
+ul {{
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}}
+li {{
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}}
+li:last-child {{
+  border-bottom: none;
+}}
+.chart-container {{
+  margin-top: 1rem;
+  min-height: 300px;
+}}
 </style>
 </head><body>
 <header><h1>QA Test Results Dashboard</h1></header>
 <div class="container">
 <div class="row">
-<div class="card" style="flex:0 0 300px">
-<h3>Executive Summary</h3>
-Total tests: <b>{total}</b><br>
-Passed: <span class="badge green">✅ {passed}</span><br>
-Failed: <span class="badge red">❌ {failed}</span><br>
-Skipped: <span class="badge orange">⚠ {skipped}</span><br>
-Pass rate: <b>{pass_rate:.1f}%</b><br>
-System Health Score: <b>{system_health:.1f}</b>/100
-</div>
-<div class="card">
-<h3>Top Failure Reasons</h3>
-<canvas id="reasonsChart" height="200"></canvas>
-</div>
+  <div class="card metrics-card" style="flex:0 0 300px">
+    <h3>Executive Summary</h3>
+    <div class="metric">
+      <div>Total Tests</div>
+      <div style="margin-left:auto;font-size:1.5rem;font-weight:600">{total}</div>
+    </div>
+    <div class="metric">
+      <span class="badge green">✓ Passed</span>
+      <span style="margin-left:auto;font-weight:500">{passed}</span>
+    </div>
+    <div class="metric">
+      <span class="badge red">⨯ Failed</span>
+      <span style="margin-left:auto;font-weight:500">{failed}</span>
+    </div>
+    <div class="metric">
+      <span class="badge orange">! Skipped</span>
+      <span style="margin-left:auto;font-weight:500">{skipped}</span>
+    </div>
+    <div style="margin-top:0.5rem;padding-top:1rem;border-top:1px solid rgba(0,0,0,0.05)">
+      <div class="metric">
+        <div>Pass Rate</div>
+        <div style="margin-left:auto;font-weight:600;color:var(--success)">{pass_rate:.1f}%</div>
+      </div>
+      <div class="metric">
+        <div>Health Score</div>
+        <div style="margin-left:auto;font-weight:600;color:var(--primary)">{system_health:.1f}/100</div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="card">
+    <h3>Top Failure Reasons</h3>
+    <div class="chart-container">
+      <canvas id="reasonsChart"></canvas>
+    </div>
+  </div>
 </div>
 
 <div class="row">
-<div class="card">
-<h3>Top Failing Tests</h3>
-<ul>"""
+  <div class="card">
+    <h3>Top Failing Tests</h3>
+    <ul>"""
     for t in analysis['top_tests']:
         nm=esc(t['name']); cnt=t['count']
         trace=esc(example_map.get(t['name'],'No trace available')[:1200])
@@ -465,11 +610,74 @@ System Health Score: <b>{system_health:.1f}</b>/100
             "rgba(75,192,192,0.8)","rgba(54,162,235,0.8)","rgba(153,102,255,0.8)","rgba(201,203,207,0.8)"]
     htmlfrag+=f"""
 <script>
-const ctx=document.getElementById('reasonsChart').getContext('2d');
-new Chart(ctx,{{
- type:'bar',
- data:{{labels:{json.dumps(reasons)},datasets:[{{data:{json.dumps(counts)},backgroundColor:{json.dumps(colors)}.slice(0,{len(reasons)})}}]}},
- options:{{indexAxis:'y',scales:{{x:{{beginAtZero:true}}}},plugins:{{legend:{{display:false}}}}}}
+const ctx = document.getElementById('reasonsChart').getContext('2d');
+const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+gradient.addColorStop(0, 'rgba(239, 68, 68, 0.8)');
+gradient.addColorStop(1, 'rgba(239, 68, 68, 0.4)');
+
+new Chart(ctx, {{
+  type: 'bar',
+  data: {{
+    labels: {json.dumps(reasons)},
+    datasets: [{{
+      data: {json.dumps(counts)},
+      backgroundColor: gradient,
+      borderRadius: 6,
+      maxBarThickness: 30
+    }}]
+  }},
+  options: {{
+    responsive: true,
+    maintainAspectRatio: false,
+    indexAxis: 'y',
+    scales: {{
+      x: {{
+        beginAtZero: true,
+        grid: {{
+          color: 'rgba(0, 0, 0, 0.05)',
+          drawBorder: false
+        }},
+        ticks: {{
+          font: {{
+            family: "'Inter', sans-serif",
+            size: 12
+          }}
+        }}
+      }},
+      y: {{
+        grid: {{
+          display: false,
+          drawBorder: false
+        }},
+        ticks: {{
+          font: {{
+            family: "'Inter', sans-serif",
+            size: 12
+          }},
+          color: '#4b5563'
+        }}
+      }}
+    }},
+    plugins: {{
+      legend: {{
+        display: false
+      }},
+      tooltip: {{
+        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+        titleFont: {{
+          family: "'Inter', sans-serif",
+          size: 13
+        }},
+        bodyFont: {{
+          family: "'Inter', sans-serif",
+          size: 12
+        }},
+        padding: 12,
+        cornerRadius: 8,
+        displayColors: false
+      }}
+    }}
+  }}
 }});
 </script>
 </body></html>"""
