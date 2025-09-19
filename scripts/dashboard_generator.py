@@ -17,7 +17,11 @@
 
 # # Simple mapping of hints for common failure reasons
 # REMEDY_HINTS = [
-#     (re.compile(r'timeout', re.I), "Increase timeouts or add retry logic; investigate slowness of dependent services."),
+#     (re.compile(r'timeout', re.I), "Increase timeouts or add retry logic; investigate slow<header id="dashboard-header"><h1 style="font-size: 28px !important; font-weight: 600 !important;">QA Test Results Dashboard</h1></header>
+<div id="dashboard-container">
+<div class="dashboard-row">
+<div class="dashboard-card" style="flex: 0 0 320px !important;">
+    <h3 style="font-size: 20px !important; font-weight: 600 !important; color: #111827 !important; margin-bottom: 20px !important; padding-bottom: 10px !important; border-bottom: 2px solid #e5e7eb !important;">Executive Summary</h3>of dependent services."),
 #     (re.compile(r'nullpointer|null pointer|none type', re.I), "Check input/setup for missing objects; add defensive null checks or fixtures."),
 #     (re.compile(r'assert|assertionerror', re.I), "Verify expected values and test data; add clearer assertions and tolerance for timing."),
 #     (re.compile(r'no such element|element not found|selector', re.I), "Stabilize selectors, add waits for element visibility, ensure test data/setup."),
@@ -380,13 +384,263 @@ def generate_recommendations(top_reasons):
         recs.append({'reason':top_reasons[0]['reason'],'suggestion':"Inspect top failure traces and prioritize tests by business impact."})
     return recs
 
-def make_html(metrics,analysis):
-    total=metrics['total']; passed=metrics['passed']; failed=metrics['failed']; skipped=metrics['skipped']
-    pass_rate=(passed/total*100) if total else 0
-    system_health=pass_rate
-
-    reasons=[r['reason'] for r in analysis['top_reasons']]
-    counts=[r['count'] for r in analysis['top_reasons']]
+def make_html(metrics, analysis):
+    total = metrics['total']
+    passed = metrics['passed']
+    failed = metrics['failed']
+    skipped = metrics['skipped']
+    pass_rate = (passed/total*100) if total else 0
+    system_health = pass_rate
+    
+    reasons = [r['reason'] for r in analysis['top_reasons']]
+    counts = [r['count'] for r in analysis['top_reasons']]
+    
+    # Build map: test name -> error
+    example_map = {}
+    for f in metrics['failures']:
+        if f['name'] not in example_map and f['error']:
+            example_map[f['name']] = f['error']
+    
+    recs = generate_recommendations(analysis['top_reasons'])
+    
+    # Generate the complete HTML
+    htmlfrag = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>QA Test Results Dashboard</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+        body {{
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background: #f3f4f6;
+            color: #111827;
+            line-height: 1.5;
+        }}
+        .header {{
+            background: linear-gradient(135deg, #2563eb, #4f46e5);
+            color: white;
+            padding: 24px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }}
+        .header h1 {{
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }}
+        .row {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+        }}
+        .card {{
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            flex: 1;
+            min-width: 300px;
+        }}
+        .metric {{
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }}
+        .badge {{
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 14px;
+        }}
+        .green {{
+            background: #ecfdf5;
+            color: #059669;
+            border: 1px solid #34d399;
+        }}
+        .red {{
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #f87171;
+        }}
+        .orange {{
+            background: #fffbeb;
+            color: #d97706;
+            border: 1px solid #fbbf24;
+        }}
+        h3 {{
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #111827;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e5e7eb;
+        }}
+        pre {{
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            overflow: auto;
+            max-height: 200px;
+            font-size: 13px;
+            line-height: 1.5;
+        }}
+        details {{
+            margin-bottom: 10px;
+        }}
+        summary {{
+            cursor: pointer;
+            padding: 10px;
+            background: #f8fafc;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+        }}
+        summary:hover {{
+            background: #f1f5f9;
+        }}
+        .chart-container {{
+            min-height: 300px;
+            margin-top: 15px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>QA Test Results Dashboard</h1>
+    </div>
+    <div class="container">
+        <div class="row">
+            <div class="card" style="flex: 0 0 300px;">
+                <h3>Executive Summary</h3>
+                <div class="metric" style="background: #1e40af; color: white;">
+                    <div>Total Tests</div>
+                    <div style="font-size: 24px; font-weight: 600;">{total}</div>
+                </div>
+                <div class="metric">
+                    <span class="badge green">✓ Passed</span>
+                    <span style="font-weight: 600;">{passed}</span>
+                </div>
+                <div class="metric">
+                    <span class="badge red">✗ Failed</span>
+                    <span style="font-weight: 600;">{failed}</span>
+                </div>
+                <div class="metric">
+                    <span class="badge orange">! Skipped</span>
+                    <span style="font-weight: 600;">{skipped}</span>
+                </div>
+                <div class="metric" style="margin-top: 15px;">
+                    <div>Pass Rate</div>
+                    <div style="font-weight: 600; color: #059669;">{pass_rate:.1f}%</div>
+                </div>
+            </div>
+            <div class="card" style="flex: 1;">
+                <h3>Top Failure Reasons</h3>
+                <div class="chart-container">
+                    <canvas id="reasonsChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="card">
+                <h3>Top Failing Tests</h3>"""
+    
+    # Add top failing tests
+    for t in analysis['top_tests'][:20]:
+        name = esc(t['name'])
+        cnt = t['count']
+        trace = esc(example_map.get(t['name'], 'No trace available'))
+        htmlfrag += f"""
+                <details>
+                    <summary>{name} — <span style="color: #666;">{cnt} failures</span></summary>
+                    <pre>{trace}</pre>
+                </details>"""
+    
+    # Add recurring failures section
+    htmlfrag += """
+            </div>
+            <div class="card">
+                <h3>Recurring Failures</h3>"""
+    
+    if analysis['recurring_failures']:
+        htmlfrag += "<ul style='list-style:none;padding:0;margin:0;'>"
+        for r in analysis['recurring_failures']:
+            htmlfrag += f"<li style='padding:10px 0;border-bottom:1px solid #e5e7eb;'><strong>{esc(r['test'])}</strong> — failed in {r['occurrences']} files</li>"
+        htmlfrag += "</ul>"
+    else:
+        htmlfrag += "<div style='color:#666;'>No recurring failures detected across parsed files.</div>"
+    
+    # Add recommendations
+    htmlfrag += "<h3 style='margin-top:20px;'>Quick Suggestions</h3>"
+    if recs:
+        for rec in recs:
+            htmlfrag += f"""
+                <div style='margin-top:15px;padding:15px;background:#f0f9ff;border-left:4px solid #2563eb;border-radius:4px;'>
+                    <strong>{esc(rec['reason'])}</strong>
+                    <div style='margin-top:5px;color:#374151;'>{esc(rec['suggestion'])}</div>
+                </div>"""
+    else:
+        htmlfrag += "<div style='color:#666;'>No automated suggestions available.</div>"
+    
+    # Close the card and container
+    htmlfrag += """
+            </div>
+        </div>
+    </div>
+    
+    <script>
+    const ctx = document.getElementById('reasonsChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: """ + json.dumps(reasons) + """,
+            datasets: [{
+                data: """ + json.dumps(counts) + """,
+                backgroundColor: '#2563eb',
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.1)'
+                    }
+                },
+                y: {
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
+    </script>
+</body>
+</html>"""
+    return htmlfrag
 
     # Build map: test name -> error
     example_map={}
@@ -396,40 +650,204 @@ def make_html(metrics,analysis):
 
     recs=generate_recommendations(analysis['top_reasons'])
 
-    htmlfrag=f"""<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8">
-<title>QA Test Results Dashboard</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    htmlfrag = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>QA Test Results Dashboard</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+        /* Base styles */
+        body {{
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background: #f3f4f6;
+            color: #111827;
+        }}
+        
+        /* Header */
+        .header {{
+            background: linear-gradient(135deg, #2563eb, #4f46e5);
+            color: white;
+            padding: 24px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }}
+        
+        .header h1 {{
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }}
+        
+        /* Container */
+        .container {{
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }}
+        
+        /* Cards */
+        .row {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+        }}
+        
+        .card {{
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            flex: 1;
+            min-width: 300px;
+        }}
+        
+        /* Metrics */
+        .metric {{
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }}
+        
+        .badge {{
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 14px;
+        }}
+        
+        .green {{
+            background: #ecfdf5;
+            color: #059669;
+            border: 1px solid #34d399;
+        }}
+        
+        .red {{
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #f87171;
+        }}
+        
+        .orange {{
+            background: #fffbeb;
+            color: #d97706;
+            border: 1px solid #fbbf24;
+        }}
+        
+        /* Text styles */
+        h3 {{
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #111827;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e5e7eb;
+        }}
+        
+        /* Code blocks */
+        pre {{
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            overflow: auto;
+            max-height: 200px;
+            font-size: 13px;
+            line-height: 1.5;
+        }}
+        
+        /* Details/Summary */
+        details {{
+            margin-bottom: 10px;
+        }}
+        
+        summary {{
+            cursor: pointer;
+            padding: 10px;
+            background: #f8fafc;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+        }}
+        
+        summary:hover {{
+            background: #f1f5f9;
+        }}
+        
+        /* Chart container */
+        .chart-container {{
+            min-height: 300px;
+            margin-top: 15px;
+        }}
+    </style>
+</head>
 <style>
-/* Base Colors and Variables */
-:root {{
-    --blue: #2563eb;
-    --indigo: #4338ca;
-    --green: #059669;
-    --red: #dc2626;
-    --yellow: #d97706;
-    --bg-light: #f3f4f6;
-    --shadow: rgba(0, 0, 0, 0.1);
-}}
-/* Core Styles */
-body {{
-    font-family: 'Roboto', -apple-system, sans-serif !important;
+/* Reset and Base Styles */
+* {{
     margin: 0 !important;
     padding: 0 !important;
-    background-color: var(--bg-light) !important;
-    color: #1a1a1a !important;
-    line-height: 1.6 !important;
+    box-sizing: border-box !important;
 }}
 
-header {{
-    background: linear-gradient(to right, var(--blue), var(--indigo)) !important;
+html, body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    line-height: 1.5 !important;
+    background: #f3f4f6 !important;
+    color: #111827 !important;
+}}
+
+/* Force all text to be readable */
+* {{
+    text-rendering: optimizeLegibility !important;
+    -webkit-font-smoothing: antialiased !important;
+}}
+/* Layout Structure */
+#dashboard-header {{
+    background: linear-gradient(135deg, #2563eb, #4f46e5) !important;
     color: white !important;
-    padding: 24px !important;
+    padding: 24px 20px !important;
     text-align: center !important;
-    box-shadow: 0 4px 6px var(--shadow) !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+    margin-bottom: 30px !important;
+}}
+
+#dashboard-container {{
+    max-width: 1200px !important;
+    margin: 0 auto !important;
+    padding: 0 20px !important;
+}}
+
+.dashboard-row {{
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 20px !important;
+    margin-bottom: 20px !important;
+    width: 100% !important;
+}}
+
+/* Card Styles */
+.dashboard-card {{
+    background: white !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+    padding: 20px !important;
+    flex: 1 1 300px !important;
+    min-width: 300px !important;
+    border: 1px solid #e5e7eb !important;
+    transition: transform 0.2s ease-in-out !important;
+}}
+
+.dashboard-card:hover {{
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15) !important;
 }}
 header h1 {{
   margin: 0;
@@ -437,31 +855,54 @@ header h1 {{
   font-weight: 700;
   letter-spacing: -0.025em;
 }}
-/* Layout */
-.container {{
-    max-width: 1200px !important;
-    margin: 0 auto !important;
-    padding: 20px !important;
-}}
-
-.row {{
+/* Metrics and Statistics */
+.dashboard-metric {{
+    padding: 16px !important;
+    border-radius: 8px !important;
+    margin-bottom: 12px !important;
     display: flex !important;
-    flex-wrap: wrap !important;
-    gap: 20px !important;
-    margin-top: 20px !important;
-    width: 100% !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
 }}
 
-/* Cards */
-.card {{
-    background: white !important;
-    border-radius: 10px !important;
-    box-shadow: 0 4px 6px var(--shadow) !important;
-    padding: 20px !important;
-    flex: 1 1 300px !important;
-    min-width: 300px !important;
-    margin-bottom: 20px !important;
-    border: 1px solid #e5e7eb !important;
+.metric-label {{
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    color: #4b5563 !important;
+}}
+
+.metric-value {{
+    font-size: 20px !important;
+    font-weight: 600 !important;
+}}
+
+.dashboard-badge {{
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 6px 12px !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
+}}
+
+.badge-success {{
+    background-color: #ecfdf5 !important;
+    color: #059669 !important;
+    border: 1px solid #34d399 !important;
+}}
+
+.badge-error {{
+    background-color: #fef2f2 !important;
+    color: #dc2626 !important;
+    border: 1px solid #f87171 !important;
+}}
+
+.badge-warning {{
+    background-color: #fffbeb !important;
+    color: #d97706 !important;
+    border: 1px solid #fbbf24 !important;
 }}
 .card:hover {{
   transform: translateY(-2px);
@@ -668,12 +1109,12 @@ li:last-child {{
     htmlfrag+=f"""
 <script>
 const ctx = document.getElementById('reasonsChart').getContext('2d');
-Chart.defaults.font.family = 'Roboto, sans-serif';
+Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 Chart.defaults.font.size = 13;
 
 const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-gradient.addColorStop(0, '#3b82f6');  // Bright blue
-gradient.addColorStop(1, '#60a5fa');  // Lighter blue
+gradient.addColorStop(0, '#3b82f6');
+gradient.addColorStop(1, '#60a5fa');
 
 new Chart(ctx, {{
   type: 'bar',
