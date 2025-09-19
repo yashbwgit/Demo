@@ -1,7 +1,7 @@
 pipeline {
   agent any
   environment {
-    py = "py"    // or python if you’re using python.exe directly
+    py = "py"   // or python.exe depending on your installation
   }
   stages {
     stage('Checkout') {
@@ -41,16 +41,19 @@ pipeline {
 
     stage('Generate Dashboard') {
       steps {
-        // Force dashboard.html into workspace root so archiver can find it
+        // 1. Create results folder
         bat """
-          ${env.py} scripts\\dashboard_generator.py report_summary.json dashboard.html
-          dir
+          if exist results rd /s /q results
+          mkdir results
+          // 2. Generate dashboard inside results folder
+          ${env.py} scripts\\dashboard_generator.py report_summary.json results\\dashboard.html
+          dir results
         """
       }
       post {
         always {
-          // archive dashboard.html from workspace root
-          archiveArtifacts artifacts: 'dashboard.html', fingerprint: true
+          // 3. Archive dashboard.html from results folder
+          archiveArtifacts artifacts: 'results/dashboard.html', fingerprint: true
         }
       }
     }
