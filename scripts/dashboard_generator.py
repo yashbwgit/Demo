@@ -391,17 +391,135 @@ def make_html(metrics, analysis):
     skipped = metrics['skipped']
     pass_rate = (passed/total*100) if total else 0
     system_health = pass_rate
-    
+
     reasons = [r['reason'] for r in analysis['top_reasons']]
     counts = [r['count'] for r in analysis['top_reasons']]
-    
-    # Build map: test name -> error
+
     example_map = {}
     for f in metrics['failures']:
         if f['name'] not in example_map and f['error']:
             example_map[f['name']] = f['error']
-    
+
     recs = generate_recommendations(analysis['top_reasons'])
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>QA Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {{ font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 0; background: #f3f4f6; }}
+        .header {{ background: linear-gradient(135deg, #2563eb, #4f46e5); color: white; padding: 24px; text-align: center; }}
+        .container {{ max-width: 1200px; margin: 20px auto; padding: 20px; }}
+        .row {{ display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; }}
+        .card {{ background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); flex: 1; min-width: 300px; }}
+        .metric {{ display: flex; align-items: center; justify-content: space-between; padding: 10px; margin: 5px 0; background: #f8fafc; border-radius: 6px; }}
+        .badge {{ padding: 6px 12px; border-radius: 4px; font-weight: bold; }}
+        .success {{ background: #dcfce7; color: #166534; }}
+        .error {{ background: #fee2e2; color: #991b1b; }}
+        .warning {{ background: #fff7ed; color: #9a3412; }}
+        h1 {{ margin: 0; font-size: 24px; }}
+        h3 {{ margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 1px solid #e5e7eb; }}
+        pre {{ background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 6px; overflow: auto; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>QA Test Results Dashboard</h1>
+    </div>
+    <div class="container">
+        <div class="row">
+            <div class="card" style="flex: 0 0 300px;">
+                <h3>Executive Summary</h3>
+                <div class="metric" style="background: #1e40af; color: white;">
+                    <div>Total Tests</div>
+                    <div style="font-size: 24px;">{total}</div>
+                </div>
+                <div class="metric">
+                    <span class="badge success">✓ Passed</span>
+                    <span>{passed}</span>
+                </div>
+                <div class="metric">
+                    <span class="badge error">✗ Failed</span>
+                    <span>{failed}</span>
+                </div>
+                <div class="metric">
+                    <span class="badge warning">! Skipped</span>
+                    <span>{skipped}</span>
+                </div>
+                <div class="metric">
+                    <div>Pass Rate</div>
+                    <div style="color: #059669;">{pass_rate:.1f}%</div>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Top Failure Reasons</h3>
+                <canvas id="chart" style="width:100%;height:300px;"></canvas>
+            </div>
+        </div>
+        <div class="row">
+            <div class="card">
+                <h3>Top Failing Tests</h3>"""
+
+    for t in analysis['top_tests'][:20]:
+        name = esc(t['name'])
+        cnt = t['count']
+        trace = esc(example_map.get(t['name'], 'No trace available'))
+        html += f"""
+                <details style="margin:10px 0;">
+                    <summary style="padding:10px;cursor:pointer;background:#f8fafc;border-radius:4px;">
+                        {name} — <span style="color:#666;">{cnt} failures</span>
+                    </summary>
+                    <pre>{trace}</pre>
+                </details>"""
+
+    html += """
+            </div>
+            <div class="card">
+                <h3>Recurring Failures</h3>"""
+
+    if analysis['recurring_failures']:
+        html += "<ul style='list-style:none;padding:0;margin:0;'>"
+        for r in analysis['recurring_failures']:
+            html += f"<li style='padding:10px 0;border-bottom:1px solid #e5e7eb;'><b>{esc(r['test'])}</b> — in {r['occurrences']} files</li>"
+        html += "</ul>"
+    else:
+        html += "<div style='color:#666;'>No recurring failures detected.</div>"
+
+    if recs:
+        html += "<h3 style='margin-top:20px;'>Suggestions</h3>"
+        for rec in recs:
+            html += f"""
+                <div style="margin:10px 0;padding:15px;background:#f0f9ff;border-radius:4px;border-left:4px solid #2563eb;">
+                    <strong>{esc(rec['reason'])}</strong>
+                    <div style="margin-top:5px;color:#374151;">{esc(rec['suggestion'])}</div>
+                </div>"""
+
+    html += f"""
+            </div>
+        </div>
+    </div>
+    <script>
+        new Chart(document.getElementById('chart').getContext('2d'), {{
+            type: 'bar',
+            data: {{
+                labels: {json.dumps(reasons)},
+                datasets: [{{
+                    data: {json.dumps(counts)},
+                    backgroundColor: '#2563eb'
+                }}]
+            }},
+            options: {{
+                indexAxis: 'y',
+                plugins: {{ legend: {{ display: false }} }},
+                scales: {{ x: {{ beginAtZero: true }} }}
+            }}
+        }});
+    </script>
+</body>
+</html>"""
+    return html
     
     # Generate the complete HTML
     htmlfrag = f"""<!DOCTYPE html>
